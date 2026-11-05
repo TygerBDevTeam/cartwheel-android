@@ -46,7 +46,19 @@ ES-DE/
 - **Filters** let you exclude individual systems, choose a genre, and limit the mix to favorites or unplayed games. They apply to roulette and weekly picks. ES-DE hidden games are always excluded.
 - **Retro / Clean** changes accent colors and typography. Both are lightweight, with no shaders or expensive CRT effects.
 
-Online scores are enabled by default and can be disabled in Appearance. A failed refresh keeps the saved catalog; discovery picks work without a connection. The catalog request does not upload your library, ROMs or artwork. Wikipedia receives the title you choose to search. No API keys are embedded or required. Wikidata scores can be incomplete or outdated; the app links to the exact source item. Wikipedia excerpts are attributed to Wikipedia contributors under CC BY-SA 4.0.
+Online scores are enabled by default and can be disabled in Settings. A failed refresh keeps the saved catalog; discovery picks work without a connection. The catalog request does not upload your library, ROMs or artwork. Wikipedia receives the title you choose to search. No API keys are embedded or required. Wikidata scores can be incomplete or outdated; the app links to the exact source item. Wikipedia excerpts are attributed to Wikipedia contributors under CC BY-SA 4.0.
+
+## Update from the handheld
+
+Open the **gear icon → Updates → Check for updates**. This works before connecting a game library. The page shows your installed version, the last successful check, release notes and a download button when a newer APK is available.
+
+**Include preview versions** is enabled for these early test builds. **Check on startup** is optional and off initially; when enabled it checks at most once per day after a successful check. No GitHub account or token is needed because the repository is public.
+
+Tap **Download update**, wait for verification, then **Install update**. Android may first ask you to allow installations from Cartwheel; return to the app and tap Install again after allowing it. Android always asks you to approve the update. Library settings and folder access are preserved during an ordinary app update.
+
+![Updates on a 4:3 display](docs/screenshots/updates-4x3.png)
+
+The downloader uses Android's download service and resumes after reopening the app. Before offering installation, Cartwheel checks the GitHub asset's SHA-256 digest, APK package name, version, minimum Android requirement and signing certificate. Errors provide a retry path and a link to all releases on GitHub. A release must have a standard version tag (such as `v0.1.2`), a `Cartwheel-*.apk` asset and GitHub's SHA-256 asset digest. Its APK version name must match the tag.
 
 “Unplayed” means zero ES-DE play count and not saved to your Cartwheel play list. A ROM-only scan cannot know your emulator play history. Missing metadata is treated as unknown/zero; ratings are never invented. Imported favorites remain favorites; Cartwheel can add its own favorites locally.
 
@@ -75,7 +87,7 @@ chmod +x gradlew
 
 Output: `app/build/outputs/apk/debug/app-debug.apk`. This is a development APK signed with the build machine's debug key. Keep that key for compatible updates, or uninstall the old build before installing a build signed on a different machine (which clears Cartwheel's local settings). ROMs and ES-DE files are untouched.
 
-GitHub Actions builds, tests, checks lint and uploads an installable debug APK. Production signing and store publishing are intentionally not configured.
+GitHub Actions builds, tests, checks lint and uploads a debug APK. Official preview releases retain the original preview signing key in the ignored `.tools/signing/cartwheel-preview.keystore`; the local build uses it when present. Keep this key private and retain it for future releases. CI's temporary debug key is for build validation. The updater accepts APKs signed with the same key as the installed app. Production signing and store publishing are intentionally not configured.
 
 ## Validation
 

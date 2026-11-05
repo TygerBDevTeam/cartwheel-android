@@ -74,8 +74,9 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun CartwheelApp(model: CartwheelViewModel = viewModel()) {
+fun CartwheelApp(model: CartwheelViewModel = viewModel(), updater: UpdateViewModel = viewModel()) {
     val state by model.state.collectAsStateWithLifecycle()
+    val updates by updater.state.collectAsStateWithLifecycle()
     val accent = if (state.theme == "retro") Lime else Color(0xFFA9CDFF)
     val mono = if (state.theme == "retro") FontFamily.Monospace else FontFamily.SansSerif
     var screen by rememberSaveable { mutableStateOf("") }
@@ -112,7 +113,9 @@ fun CartwheelApp(model: CartwheelViewModel = viewModel()) {
                             if (!compact) Text("A little less choosing. A lot more playing.", fontSize = 11.sp, color = Muted)
                         }
                         IconButton(onClick = { screen = "library" }, enabled = !state.spinning) { Icon(Icons.Outlined.FolderOpen, "Library & folders") }
-                        IconButton(onClick = { screen = "settings" }) { Icon(Icons.Outlined.Palette, "Appearance") }
+                        IconButton(onClick = { screen = "settings" }) {
+                            BadgedBox(badge = { if (updates.release != null) Badge() }) { Icon(Icons.Outlined.Settings, "Settings") }
+                        }
                     }
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(tab == "roulette", { tab = "roulette" }, { Text("Roulette", fontSize = 12.sp) }, leadingIcon = { Icon(Icons.Outlined.Shuffle, null, Modifier.size(16.dp)) })
@@ -149,7 +152,13 @@ fun CartwheelApp(model: CartwheelViewModel = viewModel()) {
         when (screen) {
             "library" -> LibraryDialog(state, model, { screen = "" })
             "filters" -> FiltersDialog(state, model, { screen = "" })
-            "settings" -> PanelDialog("Make it yours", { screen = "" }) {
+            "settings" -> PanelDialog("Settings", { screen = "" }) {
+                OutlinedButton(onClick = { screen = "updates" }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.SystemUpdate, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
+                    Text(if (updates.release != null) "Updates · new version available" else "Updates")
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("Appearance", fontWeight = FontWeight.Bold)
                 Text("Choose your look. Both work with touch and handheld controls.", color = Muted)
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -162,8 +171,9 @@ fun CartwheelApp(model: CartwheelViewModel = viewModel()) {
                     Text("Online weekly recommendations", fontSize = 13.sp)
                 }
                 Text("Uses saved online scores between refreshes. Roulette and discovery picks work offline.", fontSize = 12.sp, color = Muted)
-                Text("Cartwheel 0.1.1\nBuilt for landscape handhelds, from 4:3 to 16:9.", fontSize = 12.sp, color = Muted)
+                Text("Cartwheel ${BuildConfig.VERSION_NAME}\nBuilt for landscape handhelds, from 4:3 to 16:9.", fontSize = 12.sp, color = Muted)
             }
+            "updates" -> UpdatesDialog(updates, updater, { screen = "" })
             "recommendations" -> RecommendationsDialog(state, model, { screen = "" })
             "online" -> {
                 val game = state.games.find { it.id == onlineGameId }
@@ -482,5 +492,61 @@ private fun OnlineBackgroundDialog(game: Game, model: CartwheelViewModel, dismis
         }
         Text("Excerpts from Wikipedia contributors; shortened for display.", color = Muted, fontSize = 10.sp)
         TextButton(onClick = { uriHandler.openUri("https://creativecommons.org/licenses/by-sa/4.0/") }) { Text("CC BY-SA 4.0", fontSize = 11.sp) }
+    }
+}
+
+@Composable
+private fun UpdatesDialog(state: UpdateState, updater: UpdateViewModel, dismiss: () -> Unit) {
+    val uriHandler = LocalUriHandler.current
+    val occupied = state.downloading || state.verifying || state.checking || state.ready != null
+    PanelDialog("App updates", dismiss) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Installed version ${BuildConfig.VERSION_NAME}", Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            Button(onClick = updater::check, enabled = !occupied) {
+                Text(if (state.checking) "Checking…" else "Check for updates")
+            }
+        }
+        if (state.checking) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp))
+        if (state.checked && state.release == null && state.error == null) {
+            Text(if (state.previews) "You’re up to date." else "No newer stable release found.", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+        }
+        if (state.lastChecked > 0) Text("Last checked: ${java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(state.lastChecked))}", fontSize = 11.sp, color = Muted)
+        state.error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
+        state.release?.let { release ->
+            Spacer(Modifier.height(12.dp))
+            Text("${release.tag.removePrefix("v")} available${if (release.preview) " · preview" else ""}", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(release.notes.ifBlank { "A newer Cartwheel version is available." }, color = Muted, fontSize = 12.sp, lineHeight = 17.sp, maxLines = 7, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(8.dp))
+            when {
+                state.downloading || state.verifying -> {
+                    Text(state.status, fontSize = 12.sp)
+                    if (state.downloading) LinearProgressIndicator(progress = { (state.received.toFloat() / state.total.coerceAtLeast(1)).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+                    else LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp))
+                    OutlinedButton(onClick = updater::cancelDownload) { Text("Cancel download") }
+                }
+                state.ready != null -> {
+                    Text(state.status, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                    Button(onClick = updater::install) { Text("Install update") }
+                    Text("Android will ask you to approve installation. You may first need to allow updates from Cartwheel.", color = Muted, fontSize = 11.sp)
+                    TextButton(onClick = updater::cancelDownload) { Text("Remove download") }
+                }
+                else -> Button(onClick = updater::download, enabled = !state.checking) {
+                    Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+                    Text("Download update · ${"%.1f".format(release.bytes / 1048576.0)} MB")
+                }
+            }
+            TextButton(onClick = { uriHandler.openUri(release.pageUrl) }) { Text("Full release notes on GitHub") }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(state.automatic, updater::automatic)
+            Text("Check on startup · once per day", fontSize = 12.sp)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(state.previews, updater::previews, enabled = !occupied)
+            Text("Include preview versions", fontSize = 12.sp)
+        }
+        Text("Preview versions include the latest test builds. Downloads are checked before installation; your library and settings stay in place.", color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+        TextButton(onClick = { uriHandler.openUri(RELEASES_PAGE) }) { Text("View all releases on GitHub") }
     }
 }

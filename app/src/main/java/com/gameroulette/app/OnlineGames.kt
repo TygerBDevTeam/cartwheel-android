@@ -126,7 +126,7 @@ private fun fetchGameJson(url: String): String {
         connection.connectTimeout = 10_000
         connection.readTimeout = 25_000
         connection.instanceFollowRedirects = false
-        connection.setRequestProperty("User-Agent", "Cartwheel/0.1.1 (https://github.com/TygerBDevTeam/cartwheel-android)")
+        connection.setRequestProperty("User-Agent", "Cartwheel/${BuildConfig.VERSION_NAME} (https://github.com/TygerBDevTeam/cartwheel-android)")
         connection.setRequestProperty("Accept", "application/json")
         if (connection.responseCode == 429) throw IOException("The online service is busy. Please try again later.")
         if (connection.responseCode != 200) throw IOException("The online service is unavailable (HTTP ${connection.responseCode}).")
