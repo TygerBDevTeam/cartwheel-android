@@ -1,0 +1,12 @@
+.gradle/
+.tools/
+.kotlin/
+**/build/
+local.properties
+*.jks
+*.keystore
+.idea/
+*.iml
+captures/
+artifacts/
+/dler-native-source-*.zip
