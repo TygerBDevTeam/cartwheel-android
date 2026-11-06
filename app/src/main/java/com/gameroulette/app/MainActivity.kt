@@ -20,6 +20,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -58,11 +65,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
-private val Ink = Color(0xFF101211)
-private val Panel = Color(0xFF1A1E1B)
-private val Muted = Color(0xFFA6AFA5)
-private val Lime = Color(0xFFB6F36A)
-private val Violet = Color(0xFFBCACFF)
+private val Ink: Color @Composable get() = MaterialTheme.colorScheme.background
+private val Panel: Color @Composable get() = MaterialTheme.colorScheme.surface
+private val Muted: Color @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
+private val Secondary: Color @Composable get() = MaterialTheme.colorScheme.secondary
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,8 +83,9 @@ class MainActivity : ComponentActivity() {
 fun CartwheelApp(model: CartwheelViewModel = viewModel(), updater: UpdateViewModel = viewModel()) {
     val state by model.state.collectAsStateWithLifecycle()
     val updates by updater.state.collectAsStateWithLifecycle()
-    val accent = if (state.theme == "retro") Lime else Color(0xFFA9CDFF)
-    val mono = if (state.theme == "retro") FontFamily.Monospace else FontFamily.SansSerif
+    val colors = cartwheelColors(state.theme)
+    val accent = colors.primary
+    val displayFont = if (state.theme == "casino") FontFamily.Serif else FontFamily.SansSerif
     var screen by rememberSaveable { mutableStateOf("") }
     var tab by rememberSaveable { mutableStateOf("roulette") }
     var onlineGameId by rememberSaveable { mutableStateOf("") }
@@ -90,8 +97,7 @@ fun CartwheelApp(model: CartwheelViewModel = viewModel(), updater: UpdateViewMod
     }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(state.notice) { state.notice?.let { snackbar.showSnackbar(it); model.clearNotice() } }
-    MaterialTheme(colorScheme = darkColorScheme(primary = accent, secondary = Violet, background = Ink,
-        surface = Panel, onPrimary = Ink, onBackground = Color(0xFFF2F5ED), onSurface = Color(0xFFF2F5ED))) {
+    MaterialTheme(colorScheme = colors) {
         Scaffold(containerColor = Ink, snackbarHost = { SnackbarHost(snackbar) }) { padding ->
             BoxWithConstraints(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp, vertical = 8.dp)
                 .onPreviewKeyEvent { event ->
@@ -109,22 +115,19 @@ fun CartwheelApp(model: CartwheelViewModel = viewModel(), updater: UpdateViewMod
                         Icon(Icons.Outlined.Casino, null, Modifier.size(28.dp), tint = accent)
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("CARTWHEEL", fontFamily = mono, fontSize = if (compact) 18.sp else 22.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
+                            Text("CARTWHEEL", fontFamily = displayFont, fontSize = if (compact) 18.sp else 22.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.sp)
                             if (!compact) Text("A little less choosing. A lot more playing.", fontSize = 11.sp, color = Muted)
                         }
+                        IconButton(onClick = { screen = "favorites" }, enabled = !state.spinning) { Icon(Icons.Outlined.FavoriteBorder, "Favorites") }
+                        IconButton(onClick = { screen = "filters" }, enabled = !state.spinning) { Icon(Icons.Outlined.Tune, "Filters") }
                         IconButton(onClick = { screen = "library" }, enabled = !state.spinning) { Icon(Icons.Outlined.FolderOpen, "Library & folders") }
                         IconButton(onClick = { screen = "settings" }) {
                             BadgedBox(badge = { if (updates.release != null) Badge() }) { Icon(Icons.Outlined.Settings, "Settings") }
                         }
                     }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(tab == "roulette", { tab = "roulette" }, { Text("Roulette", fontSize = 12.sp) }, leadingIcon = { Icon(Icons.Outlined.Shuffle, null, Modifier.size(16.dp)) })
-                        FilterChip(tab == "weekly", { tab = "weekly"; model.refreshWeek(); model.loadRecommendations() }, { Text(if (compact) "This week" else "Game of the Week", fontSize = 12.sp) }, leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null, Modifier.size(16.dp)) })
-                        Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { screen = "history" }) { Icon(Icons.Outlined.Bookmarks, "Your play list") }
-                        OutlinedButton(onClick = { screen = "filters" }, enabled = !state.spinning, contentPadding = PaddingValues(horizontal = 12.dp)) {
-                            Icon(Icons.Outlined.Tune, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Filters", fontSize = 12.sp)
-                        }
+                    Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ModeTab("Roulette", Icons.Outlined.Casino, tab == "roulette", { tab = "roulette" }, Modifier.weight(1f))
+                        ModeTab("Game of the Week", Icons.Outlined.AutoAwesome, tab == "weekly", { tab = "weekly"; model.refreshWeek(); model.loadRecommendations() }, Modifier.weight(1f))
                     }
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         when {
@@ -133,7 +136,7 @@ fun CartwheelApp(model: CartwheelViewModel = viewModel(), updater: UpdateViewMod
                             state.eligible.isEmpty() -> EmptyPool { screen = "filters" }
                             else -> {
                                 val game = if (tab == "weekly") state.weekly else state.current
-                                GameStage(game, state, compact, mono, accent, tab == "weekly", model,
+                                GameStage(game, state, compact, displayFont, accent, tab == "weekly", model,
                                     onBackground = { onlineGameId = it.id; screen = "online" },
                                     onOnlineStatus = { screen = "recommendations" })
                             }
@@ -142,9 +145,9 @@ fun CartwheelApp(model: CartwheelViewModel = viewModel(), updater: UpdateViewMod
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(6.dp).background(accent, RoundedCornerShape(3.dp)))
                         Spacer(Modifier.width(7.dp))
-                        Text(if (state.games.isEmpty()) "YOUR NEXT ADVENTURE IS WAITING" else "${state.eligible.size} GAMES IN THE MIX", fontFamily = mono, fontSize = 9.sp, color = Muted, letterSpacing = 1.sp)
+                        Text(if (state.games.isEmpty()) "YOUR NEXT ADVENTURE IS WAITING" else "${state.eligible.size} GAMES IN THE MIX", fontFamily = displayFont, fontSize = 9.sp, color = Muted, letterSpacing = 1.sp)
                         Spacer(Modifier.weight(1f))
-                        Text(if (compact) "X Reroll · Y Filters" else "X Reroll   ·   Y Filters   ·   START Library", fontFamily = mono, fontSize = 9.sp, color = Muted)
+                        Text(if (compact) "X Reroll · Y Filters" else "X Reroll   ·   Y Filters   ·   START Library", fontFamily = displayFont, fontSize = 9.sp, color = Muted)
                     }
                 }
             }
@@ -159,11 +162,11 @@ fun CartwheelApp(model: CartwheelViewModel = viewModel(), updater: UpdateViewMod
                 }
                 Spacer(Modifier.height(12.dp))
                 Text("Appearance", fontWeight = FontWeight.Bold)
-                Text("Choose your look. Both work with touch and handheld controls.", color = Muted)
+                Text("Choose the atmosphere for your next spin.", color = Muted)
                 Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FilterChip(state.theme == "retro", { model.setTheme("retro") }, { Text("Retro · lime + pixel spirit") })
-                    FilterChip(state.theme == "clean", { model.setTheme("clean") }, { Text("Clean · calm blue") })
+                Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    AppearanceChoice("Calm Blue", "Midnight navy · soft blue", "clean", state.theme, model::setTheme, Modifier.weight(1f))
+                    AppearanceChoice("Casino", "Green felt · gold & crimson", "casino", state.theme, model::setTheme, Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -172,9 +175,20 @@ fun CartwheelApp(model: CartwheelViewModel = viewModel(), updater: UpdateViewMod
                 }
                 Text("Uses saved online scores between refreshes. Roulette and discovery picks work offline.", fontSize = 12.sp, color = Muted)
                 Text("Cartwheel ${BuildConfig.VERSION_NAME}\nBuilt for landscape handhelds, from 4:3 to 16:9.", fontSize = 12.sp, color = Muted)
+                if (state.history.isNotEmpty()) TextButton(onClick = { screen = "history" }) { Text("Previous play list") }
             }
             "updates" -> UpdatesDialog(updates, updater, { screen = "" })
             "recommendations" -> RecommendationsDialog(state, model, { screen = "" })
+            "favorites" -> PanelDialog("Favorites", { screen = "" }, scrollable = false) {
+                val favorites = state.games.filter { !it.hidden && state.isFavorite(it) }
+                if (favorites.isEmpty()) Text("Favorite a pick to find it here.", color = Muted)
+                else LazyColumn(Modifier.fillMaxSize()) {
+                    items(favorites, key = Game::id) { game ->
+                        ListItem(headlineContent = { Text(game.name) }, supportingContent = { Text(systemName(game.system)) },
+                            trailingContent = { IconButton(onClick = { model.toggleFavorite(game) }) { Icon(Icons.Outlined.Favorite, "Remove ${game.name} from favorites", tint = MaterialTheme.colorScheme.secondary) } })
+                    }
+                }
+            }
             "online" -> {
                 val game = state.games.find { it.id == onlineGameId }
                 if (game != null) OnlineBackgroundDialog(game, model, { screen = "" })
@@ -182,7 +196,7 @@ fun CartwheelApp(model: CartwheelViewModel = viewModel(), updater: UpdateViewMod
             }
             "history" -> PanelDialog("Your play list", { screen = "" }) {
                 val history = state.history.mapNotNull { id -> state.games.find { it.id == id } }
-                if (history.isEmpty()) Text("Say “Yes, this one” to save a game here.", color = Muted)
+                if (history.isEmpty()) Text("Your earlier saved picks appear here.", color = Muted)
                 history.forEach { game ->
                     ListItem(headlineContent = { Text(game.name) }, supportingContent = { Text(systemName(game.system)) }, leadingContent = { Icon(Icons.Outlined.CheckCircle, null) })
                 }
@@ -192,29 +206,58 @@ fun CartwheelApp(model: CartwheelViewModel = viewModel(), updater: UpdateViewMod
 }
 
 @Composable
-private fun GameStage(game: Game?, state: UiState, compact: Boolean, mono: FontFamily, accent: Color, weekly: Boolean, model: CartwheelViewModel,
+private fun ModeTab(label: String, icon: ImageVector, selected: Boolean, action: () -> Unit, modifier: Modifier) {
+    val colors = MaterialTheme.colorScheme
+    Surface(modifier.height(50.dp).clip(RoundedCornerShape(13.dp)).selectable(selected, role = Role.Tab, onClick = action),
+        color = if (selected) colors.primaryContainer else colors.surface,
+        border = BorderStroke(1.dp, if (selected) colors.primary.copy(alpha = .65f) else colors.outlineVariant),
+        shape = RoundedCornerShape(13.dp)) {
+        Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, Modifier.size(20.dp), tint = if (selected) colors.primary else colors.onSurfaceVariant)
+            Spacer(Modifier.width(8.dp))
+            Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun AppearanceChoice(label: String, description: String, theme: String, current: String, choose: (String) -> Unit, modifier: Modifier) {
+    val colors = cartwheelColors(theme)
+    Surface(modifier.height(78.dp).clip(RoundedCornerShape(12.dp)).selectable(current == theme, role = Role.RadioButton, onClick = { choose(theme) }),
+        color = colors.surface, shape = RoundedCornerShape(12.dp), border = BorderStroke(if (current == theme) 2.dp else 1.dp, if (current == theme) colors.primary else colors.outlineVariant)) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(14.dp).background(colors.primary, RoundedCornerShape(7.dp)))
+            Spacer(Modifier.width(9.dp))
+            Column(Modifier.weight(1f)) {
+                Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = colors.onSurface)
+                Text(description, fontSize = 10.sp, lineHeight = 14.sp, color = colors.onSurfaceVariant)
+            }
+            if (current == theme) Icon(Icons.Outlined.Check, null, Modifier.size(18.dp), tint = colors.primary)
+        }
+    }
+}
+
+@Composable
+private fun GameStage(game: Game?, state: UiState, compact: Boolean, displayFont: FontFamily, accent: Color, weekly: Boolean, model: CartwheelViewModel,
     onBackground: (Game) -> Unit, onOnlineStatus: () -> Unit) {
     Row(Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp)).background(Panel)
-        .border(1.dp, Color.White.copy(alpha = .07f), RoundedCornerShape(22.dp))) {
+        .border(1.dp, accent.copy(alpha = .18f), RoundedCornerShape(22.dp))) {
         Box(Modifier.weight(if (compact) .40f else .43f).fillMaxHeight()
-            .background(Brush.linearGradient(listOf(Color(0xFF35384B), Color(0xFF222B29), Color(0xFF18241D))))
+            .background(Brush.linearGradient(if (state.theme == "casino") listOf(Color(0xFF234838), Color(0xFF123326), Color(0xFF0B2018)) else listOf(Color(0xFF203E63), Color(0xFF162D49), Color(0xFF101E32))))
             .padding(if (compact) 16.dp else 24.dp), contentAlignment = Alignment.Center) {
-            Canvas(Modifier.fillMaxSize()) {
-                for (x in 0..(size.width / 22).toInt()) for (y in 0..(size.height / 22).toInt())
-                    drawCircle(Color.White.copy(alpha = .07f), 1f, androidx.compose.ui.geometry.Offset(x * 22f, y * 22f))
-            }
-            Artwork(game, mono, accent)
+            if (state.theme == "casino") CasinoWheel(accent)
+            Artwork(game, displayFont, accent)
             if (state.spinning) CircularProgressIndicator(Modifier.align(Alignment.BottomCenter).size(24.dp), color = accent, strokeWidth = 2.dp)
         }
         Column(Modifier.weight(if (compact) .60f else .57f).fillMaxHeight().padding(if (compact) 16.dp else 24.dp)) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(if (compact) 7.dp else 11.dp)) {
-                Text(if (weekly) "YOUR WEEKLY SIDE QUEST" else if (state.spinning) "LET FATE DO ITS THING…" else if (game == null) "GOOD GAMES. ZERO INDECISION." else "HOW ABOUT THIS ONE?", fontFamily = mono, fontSize = 9.sp, letterSpacing = 1.5.sp, color = accent)
-                Text(game?.name ?: "Meet your\nnext adventure.", fontSize = if (compact) 23.sp else 34.sp, lineHeight = if (compact) 27.sp else 38.sp, fontWeight = FontWeight.ExtraBold, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Text(if (weekly) "YOUR WEEKLY SIDE QUEST" else if (state.spinning) "LET FATE DO ITS THING…" else if (game == null) "GOOD GAMES. ZERO INDECISION." else "HOW ABOUT THIS ONE?", fontFamily = displayFont, fontSize = 9.sp, letterSpacing = 1.5.sp, color = accent)
+                Text(game?.name ?: "Meet your\nnext adventure.", fontFamily = displayFont, fontSize = if (compact) 23.sp else 34.sp, lineHeight = if (compact) 27.sp else 38.sp, fontWeight = FontWeight.ExtraBold, maxLines = 3, overflow = TextOverflow.Ellipsis)
                 if (game != null) {
-                    Text(listOf(systemName(game.system), game.year, game.genre).filter(String::isNotBlank).joinToString("  /  "), fontSize = 11.sp, color = Violet)
+                    Text(listOf(systemName(game.system), game.year, game.genre).filter(String::isNotBlank).joinToString("  /  "), fontSize = 11.sp, color = Secondary)
                     if (weekly) {
                         Text(recommendationReason(game, state), fontSize = 12.sp, color = Muted, lineHeight = 17.sp)
-                        Text("Week of ${state.week} · Reroll whenever you like", fontFamily = mono, fontSize = 9.sp, color = Muted)
+                        Text("Week of ${state.week} · Reroll whenever you like", fontFamily = displayFont, fontSize = 9.sp, color = Muted)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TextButton(onClick = { onBackground(game) }, contentPadding = PaddingValues(horizontal = 4.dp)) {
                                 Icon(Icons.Outlined.Language, null, Modifier.size(15.dp)); Spacer(Modifier.width(4.dp)); Text("Game background", fontSize = 11.sp)
@@ -228,12 +271,8 @@ private fun GameStage(game: Game?, state: UiState, compact: Boolean, mono: FontF
                     } else Text("A new adventure from your collection. Give it a chance?", fontSize = 12.sp, color = Muted, lineHeight = 17.sp)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (game.rating > 0) Text("★ ${"%.1f".format(game.rating * 5)}  ", color = accent, fontSize = 11.sp)
-                        Text(if (game.id in state.accepted) "ON YOUR PLAY LIST" else if (game.playCount == 0) "NOT PLAYED YET*" else "${game.playCount} RECORDED PLAYS", fontFamily = mono, fontSize = 9.sp, color = Muted)
+                        Text(if (game.id in state.accepted) "ON YOUR PLAY LIST" else if (game.playCount == 0) "NOT PLAYED YET*" else "${game.playCount} RECORDED PLAYS", fontFamily = displayFont, fontSize = 9.sp, color = Muted)
                         Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { model.toggleFavorite(game) }, enabled = !state.spinning, modifier = Modifier.size(40.dp)) {
-                            val favorite = game.favorite || game.id in state.favorites
-                            Icon(if (favorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder, if (favorite) "Favorite game" else "Add favorite", tint = if (favorite) Violet else Muted, modifier = Modifier.size(20.dp))
-                        }
                     }
                 } else Text("Your collection is full of possibilities.\nLet’s find something worth playing.", color = Muted, fontSize = 13.sp, lineHeight = 20.sp)
             }
@@ -246,15 +285,36 @@ private fun GameStage(game: Game?, state: UiState, compact: Boolean, mono: FontF
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { model.accept(game) }, enabled = !state.spinning, modifier = Modifier.weight(1f).height(46.dp).focusRequester(focus), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
-                        Icon(Icons.Outlined.Check, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text(if (game.id in state.accepted) "Saved to play" else "Yes, this one", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    val favorite = state.isFavorite(game)
+                    FilledTonalButton(onClick = { model.toggleFavorite(game) }, enabled = !state.spinning,
+                        modifier = Modifier.weight(1f).height(48.dp).semantics { stateDescription = if (favorite) "Saved as a favorite" else "Not a favorite" },
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = if (favorite) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = if (favorite) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface),
+                        shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                        Icon(if (favorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp)); Text(if (favorite) "Favorited" else "Favorite", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
-                    OutlinedButton(onClick = { if (weekly) model.refreshWeek(true) else model.spin() }, enabled = !state.spinning, modifier = Modifier.height(46.dp), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
-                        Icon(Icons.Outlined.Refresh, null, Modifier.size(17.dp)); Spacer(Modifier.width(4.dp)); Text(if (weekly) "Reroll" else "Skip", fontSize = 12.sp)
+                    Button(onClick = { if (weekly) model.refreshWeek(true) else model.spin() }, enabled = !state.spinning, modifier = Modifier.weight(1f).height(48.dp).focusRequester(focus), shape = RoundedCornerShape(12.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                        Icon(if (weekly) Icons.Outlined.Refresh else Icons.Outlined.Casino, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(if (weekly) "Reroll" else "Spin again", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CasinoWheel(gold: Color) {
+    Canvas(Modifier.fillMaxSize()) {
+        val radius = size.minDimension * .43f
+        val center = Offset(size.width * .5f, size.height * .35f)
+        val origin = Offset(center.x - radius, center.y - radius)
+        for (segment in 0 until 24) drawArc(
+            color = if (segment == 0) Color(0xFF469572).copy(alpha = .35f) else if (segment % 2 == 0) Color(0xFFAD4653).copy(alpha = .32f) else Color(0xFF020A07).copy(alpha = .45f),
+            startAngle = -97.5f + segment * 15f, sweepAngle = 14f, useCenter = true, topLeft = origin, size = Size(radius * 2, radius * 2))
+        drawCircle(gold.copy(alpha = .35f), radius, center, style = Stroke(1.5.dp.toPx()))
+        drawCircle(Color(0xFF123326), radius * .66f, center)
+        drawCircle(gold.copy(alpha = .25f), radius * .66f, center, style = Stroke(1.dp.toPx()))
     }
 }
 
@@ -269,7 +329,7 @@ private fun recommendationReason(game: Game, state: UiState): String {
 }
 
 @Composable
-private fun Artwork(game: Game?, mono: FontFamily, accent: Color) {
+private fun Artwork(game: Game?, displayFont: FontFamily, accent: Color) {
     val context = LocalContext.current
     val bitmap by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, game?.artwork) {
         value = null
@@ -288,9 +348,9 @@ private fun Artwork(game: Game?, mono: FontFamily, accent: Color) {
     else Column(Modifier.fillMaxSize().padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Icon(if (game == null) Icons.Outlined.Casino else Icons.Outlined.SportsEsports, null, Modifier.size(58.dp), tint = accent)
         Spacer(Modifier.height(16.dp))
-        Text(game?.name ?: "ONE MORE\nGREAT GAME.", fontFamily = mono, fontWeight = FontWeight.Bold, fontSize = 17.sp, lineHeight = 23.sp, color = Color.White.copy(alpha = .9f), maxLines = 4)
+        Text(game?.name ?: "ONE MORE\nGREAT GAME.", fontFamily = displayFont, fontWeight = FontWeight.Bold, fontSize = 17.sp, lineHeight = 23.sp, color = Color.White.copy(alpha = .9f), maxLines = 4)
         Spacer(Modifier.height(12.dp))
-        Text(if (game == null) "PRESS YOUR LUCK" else "${systemName(game.system)} · NO BOX ART", color = Muted, fontFamily = mono, fontSize = 8.sp, letterSpacing = 1.sp)
+        Text(if (game == null) "PRESS YOUR LUCK" else "${systemName(game.system)} · NO BOX ART", color = Muted, fontFamily = displayFont, fontSize = 8.sp, letterSpacing = 1.sp)
     }
 }
 
@@ -304,7 +364,7 @@ private fun Loading(message: String) {
 @Composable
 private fun EmptyLibrary(open: () -> Unit) {
     Row(Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp)).background(Panel).padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Outlined.Casino, null, Modifier.size(66.dp), tint = Lime)
+        Icon(Icons.Outlined.Casino, null, Modifier.size(66.dp), tint = MaterialTheme.colorScheme.primary)
         Column(Modifier.weight(1f)) {
             Text("Too many games.\nOne good decision.", fontSize = 26.sp, lineHeight = 30.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(Modifier.height(10.dp)); Text("Connect your ES-DE library or scan your ROMs.\nYour next adventure is already in your collection.", color = Muted, fontSize = 12.sp, lineHeight = 17.sp)
@@ -323,7 +383,7 @@ private fun EmptyPool(open: () -> Unit) {
 }
 
 @Composable
-private fun PanelDialog(title: String, dismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+private fun PanelDialog(title: String, dismiss: () -> Unit, scrollable: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
     Dialog(onDismissRequest = dismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxWidth(.94f).widthIn(max = 840.dp).fillMaxHeight(.94f), shape = RoundedCornerShape(22.dp), color = Panel) {
             Column(Modifier.padding(20.dp)) {
@@ -331,7 +391,7 @@ private fun PanelDialog(title: String, dismiss: () -> Unit, content: @Composable
                     Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     IconButton(onClick = dismiss) { Icon(Icons.Outlined.Close, "Close") }
                 }
-                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), content = content)
+                Column(Modifier.weight(1f).then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier), content = content)
             }
         }
     }

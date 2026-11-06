@@ -112,11 +112,11 @@ data class GameFilters(
 )
 
 object Roulette {
-    fun eligible(games: List<Game>, filters: GameFilters, favorites: Set<String>, accepted: Set<String>): List<Game> =
+    fun eligible(games: List<Game>, filters: GameFilters, favorites: Set<String>, accepted: Set<String>, removedFavorites: Set<String> = emptySet()): List<Game> =
         games.filter { game ->
             !game.hidden && game.system !in filters.excludedSystems &&
                 (filters.genre.isBlank() || game.genre.equals(filters.genre, ignoreCase = true)) &&
-                (!filters.favoritesOnly || game.favorite || game.id in favorites) &&
+                (!filters.favoritesOnly || game.id in favorites || (game.favorite && game.id !in removedFavorites)) &&
                 (!filters.unplayedOnly || (game.playCount == 0 && game.id !in accepted))
         }
 

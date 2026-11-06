@@ -25,7 +25,7 @@ data class UiState(
     val weekly: Game? = null,
     val weeklyReroll: Int = 0,
     val week: String = "",
-    val theme: String = "retro",
+    val theme: String = "clean",
     val busy: Boolean = true,
     val spinning: Boolean = false,
     val progress: String = "Opening your library…",
@@ -35,9 +35,11 @@ data class UiState(
     val reviews: Map<String, OnlineReview> = emptyMap(),
     val advisorLoading: Boolean = false,
     val advisorUpdated: Long = 0L,
-    val advisorError: String? = null
+    val advisorError: String? = null,
+    val removedFavorites: Set<String> = emptySet()
 ) {
-    val eligible: List<Game> get() = Roulette.eligible(games, filters, favorites, accepted)
+    val eligible: List<Game> get() = Roulette.eligible(games, filters, favorites, accepted, removedFavorites)
+    fun isFavorite(game: Game): Boolean = game.id in favorites || (game.favorite && game.id !in removedFavorites)
 }
 
 class CartwheelViewModel(application: Application) : AndroidViewModel(application) {
@@ -49,7 +51,8 @@ class CartwheelViewModel(application: Application) : AndroidViewModel(applicatio
     private val mutable = MutableStateFlow(UiState(
         config = LibraryConfig(prefs.getString("source", "esde")!!, prefs.getString("roms", "")!!, prefs.getString("esde", "")!!, prefs.getString("media", "")!!),
         filters = GameFilters(set("excluded"), prefs.getString("genre", "")!!, prefs.getBoolean("onlyFavorites", false), prefs.getBoolean("onlyUnplayed", false)),
-        favorites = set("favorites"), accepted = set("accepted"), theme = prefs.getString("theme", "retro")!!,
+        favorites = set("favorites"), accepted = set("accepted"), removedFavorites = set("removedFavorites"),
+        theme = normalizedAppearance(prefs.getString("theme", null)),
         onlineEnabled = prefs.getBoolean("onlineRecommendations", true),
         history = runCatching { JSONArray(prefs.getString("history", "[]")).let { a -> (0 until a.length()).map(a::getString) } }.getOrDefault(emptyList())
     ))
@@ -58,6 +61,7 @@ class CartwheelViewModel(application: Application) : AndroidViewModel(applicatio
     private var seen = set("seen")
 
     init {
+        prefs.edit().putString("theme", mutable.value.theme).apply()
         viewModelScope.launch {
             try {
                 val (games, savedCatalog) = withContext(Dispatchers.IO) { repository.load() to online.loadCatalog() }
@@ -72,8 +76,9 @@ class CartwheelViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun setTheme(theme: String) {
-        prefs.edit().putString("theme", theme).apply()
-        mutable.update { it.copy(theme = theme) }
+        val appearance = normalizedAppearance(theme)
+        prefs.edit().putString("theme", appearance).apply()
+        mutable.update { it.copy(theme = appearance) }
     }
 
     fun import(config: LibraryConfig) {
@@ -101,7 +106,7 @@ class CartwheelViewModel(application: Application) : AndroidViewModel(applicatio
         prefs.edit().putStringSet("excluded", filters.excludedSystems).putString("genre", filters.genre)
             .putBoolean("onlyFavorites", filters.favoritesOnly).putBoolean("onlyUnplayed", filters.unplayedOnly).apply()
         mutable.update { state ->
-            val eligible = Roulette.eligible(state.games, filters, state.favorites, state.accepted)
+            val eligible = Roulette.eligible(state.games, filters, state.favorites, state.accepted, state.removedFavorites)
             state.copy(filters = filters, current = state.current?.takeIf { g -> eligible.any { it.id == g.id } })
         }
         refreshWeek()
@@ -126,15 +131,13 @@ class CartwheelViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun accept(game: Game) {
-        mutable.update { it.copy(accepted = it.accepted + game.id, history = (listOf(game.id) + it.history.filter { id -> id != game.id }).take(100), notice = "${game.name} added to your play list.") }
-        prefs.edit().putStringSet("accepted", mutable.value.accepted).putString("history", JSONArray(mutable.value.history).toString()).apply()
-    }
-
     fun toggleFavorite(game: Game) {
-        val favorites = mutable.value.favorites.let { if (game.id in it) it - game.id else it + game.id }
-        mutable.update { it.copy(favorites = favorites) }
-        prefs.edit().putStringSet("favorites", favorites).apply()
+        val state = mutable.value
+        val favorite = state.isFavorite(game)
+        val favorites = if (favorite) state.favorites - game.id else state.favorites + game.id
+        val removed = if (favorite) state.removedFavorites + game.id else state.removedFavorites - game.id
+        mutable.update { it.copy(favorites = favorites, removedFavorites = removed) }
+        prefs.edit().putStringSet("favorites", favorites).putStringSet("removedFavorites", removed).apply()
     }
 
     fun refreshWeek(reroll: Boolean = false, reconsider: Boolean = false) {

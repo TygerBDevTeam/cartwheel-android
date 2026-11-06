@@ -49,21 +49,33 @@ class ScreenTest {
 
     @Test fun homeFitsWidescreen() {
         compose.onNodeWithText("Connect your library").assertIsDisplayed()
-        compose.onNodeWithText("Filters").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Filters").assertIsDisplayed()
+        val roulette = compose.onNodeWithText("Roulette").fetchSemanticsNode().boundsInRoot
+        val weekly = compose.onNodeWithText("Game of the Week").fetchSemanticsNode().boundsInRoot
+        org.junit.Assert.assertTrue(roulette.width > 400f)
+        org.junit.Assert.assertEquals(roulette.width, weekly.width, 1f)
         screenshot("welcome-16x9")
     }
 
     @Test @Config(qualifiers = "w640dp-h480dp-land-mdpi") fun homeFitsFourByThree() {
         compose.onNodeWithText("Connect your library").assertIsDisplayed()
-        compose.onNodeWithText("Filters").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Filters").assertIsDisplayed()
+        compose.onNodeWithText("Game of the Week").assertIsDisplayed()
         screenshot("welcome-4x3")
     }
 
     @Test fun switchesThemeAndKeepsChoice() {
         compose.onNodeWithContentDescription("Settings").performClick()
-        compose.onNodeWithText("Clean · calm blue").performClick()
+        compose.onNodeWithText("Retro · lime + pixel spirit").assertDoesNotExist()
+        compose.onNodeWithText("Casino").performClick()
         compose.waitForIdle()
         val context = ApplicationProvider.getApplicationContext<Context>()
+        org.junit.Assert.assertEquals("casino", context.getSharedPreferences("cartwheel", 0).getString("theme", ""))
+        compose.onNodeWithContentDescription("Close").performClick()
+        screenshot("casino-16x9")
+        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithText("Calm Blue").performClick()
+        compose.waitForIdle()
         org.junit.Assert.assertEquals("clean", context.getSharedPreferences("cartwheel", 0).getString("theme", ""))
         compose.onNodeWithContentDescription("Close").performClick()
         screenshot("clean-16x9")

@@ -5,7 +5,7 @@
 A native Android game roulette for retro handhelds, with an online weekly advisor and offline roulette. Designed for landscape screens from 4:3 to 16:9, with touch and D-pad navigation.
 
 ![Roulette on a 16:9 screen](docs/screenshots/roulette-16x9.png)
-![Weekly pick on a 4:3 screen](docs/screenshots/weekly-4x3.png)
+![Casino theme on a 4:3 screen](docs/screenshots/casino-weekly-4x3.png)
 
 Screenshots use a fictional test library. Your downloaded artwork appears after linking your folders.
 
@@ -38,13 +38,14 @@ ES-DE/
 ## Find something to play
 
 - **Roulette** draws equally from eligible games. It works through the pool before repeating and avoids the current game when alternatives exist. The draw history survives app restarts.
-- **Yes, this one** saves a game to your Cartwheel play list. It does not open an emulator or modify ES-DE's gamelists.
-- **Skip** picks another game.
+- The wide **Roulette / Game of the Week** tabs share the full row for quick switching, with both names visible on 4:3 displays.
+- **Favorite / Favorited** toggles a pick in your local favorites. It does not mark the game played or change ES-DE's files. The heart in the header opens your favorites, including imported ES-DE favorites; you can remove them locally too.
+- **Spin again** picks another game. **Reroll** changes the weekly pick.
 - **Game of the Week** can use online review data without personal ratings. Opening the weekly tab downloads a shared catalog of Metacritic scores recorded in Wikidata, cached for seven days and matched to your library locally. Exact normalized titles/aliases and systems must match; ambiguous titles are skipped. Platform-specific scores take priority. Unspecified editions are clearly marked, and multiple unspecified scores are shown as a range. Coverage is limited, especially for older systems. Eligible matches scoring at least 75/100 get priority; if there are none, you receive a discovery pick. Every fourth reroll explores the wider library. Scraped ratings and no recorded plays are also selection signals.
 - **Game background** searches Wikipedia for the picked game and shows attributed excerpts with links to the original articles. Search results let you check the title and edition. This lookup supplies context, not review scores. It requires internet access when used.
 - **Reroll whenever you like.** The weekly replacement persists across restarts. A new week starts on Monday using the handheld's local date. Changing filters can change the eligible weekly pick.
 - **Filters** let you exclude individual systems, choose a genre, and limit the mix to favorites or unplayed games. They apply to roulette and weekly picks. ES-DE hidden games are always excluded.
-- **Retro / Clean** changes accent colors and typography. Both are lightweight, with no shaders or expensive CRT effects.
+- **Calm Blue** is the default appearance, with a midnight-navy background and soft blue accents. Existing lime-theme installations switch to Calm Blue automatically. **Casino** adds green felt, gold, crimson, serif titles and a subtle roulette-wheel backdrop. Both work with touch and controllers.
 
 Online scores are enabled by default and can be disabled in Settings. A failed refresh keeps the saved catalog; discovery picks work without a connection. The catalog request does not upload your library, ROMs or artwork. Wikipedia receives the title you choose to search. No API keys are embedded or required. Wikidata scores can be incomplete or outdated; the app links to the exact source item. Wikipedia excerpts are attributed to Wikipedia contributors under CC BY-SA 4.0.
 
@@ -60,7 +61,7 @@ Tap **Download update**, wait for verification, then **Install update**. Android
 
 The downloader uses Android's download service and resumes after reopening the app. Before offering installation, Cartwheel checks the GitHub asset's SHA-256 digest, APK package name, version, minimum Android requirement and signing certificate. Errors provide a retry path and a link to all releases on GitHub. A release must have a standard version tag (such as `v0.1.2`), a `Cartwheel-*.apk` asset and GitHub's SHA-256 asset digest. Its APK version name must match the tag.
 
-“Unplayed” means zero ES-DE play count and not saved to your Cartwheel play list. A ROM-only scan cannot know your emulator play history. Missing metadata is treated as unknown/zero; ratings are never invented. Imported favorites remain favorites; Cartwheel can add its own favorites locally.
+“Unplayed” means zero ES-DE play count and no earlier saved play-list choice from older Cartwheel builds. Favoriting a game leaves its played status alone. If you previously saved a play list, it is still available in Settings. A ROM-only scan cannot know your emulator play history. Missing metadata is treated as unknown/zero; ratings are never invented. Local favorite changes are stored by Cartwheel and never written back to ES-DE.
 
 Controller controls: D-pad to move focus, confirm button to activate the focused control, Back to dismiss dialogs, **X** to reroll, **Y** for filters, **Start** for library setup. X/Y labels refer to Android's button key codes; physical labels can differ between handhelds.
 
